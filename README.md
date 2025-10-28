@@ -164,9 +164,9 @@ python -m src.train --config config/separation_models/separator_iterative.yaml -
 
 ### Resuming Training
 
-To resume training from a checkpoint:
+To resume training from a checkpoint (of a non-iterative model, adjust path accordingly for iterative models), use:
 ```bash
-python -m src.train --config config/separation_models/separator_non_iterative.yaml --resume outputs/checkpoints/separator_baseline/<wandb_id>/last.ckpt
+python -m src.train --config config/separation_models/separator_non_iterative.yaml --resume outputs/checkpoints/separator_non_iterative/<wandb_id>/last.ckpt --resume_wandb_id <wandb_id>
 ```
 
 ## Checkpoints
