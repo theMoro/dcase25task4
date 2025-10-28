@@ -1,0 +1,99 @@
+# Test configuration for DCASE 2025 Task 4 models
+# This config is used with test.py for evaluating trained models
+
+# Wandb configuration
+wandb_entity: cp_tobi
+
+# Data copying configuration
+enable_data_copy: true
+
+deterministic: true
+manual_seed: 0
+
+datamodule:
+    module: src.datamodules.datamodule
+    main: DataModule
+    args:
+        test_dataloader:
+            batch_size: 2
+            num_workers: 16
+            persistent_workers: false
+            dataset:
+                module: src.datamodules.dataset.s5.dataset_s5_waveform
+                main: DatasetS5Waveform
+                args:
+                    soundscape_dir: "data/dev_set/test/soundscape"
+                    oracle_target_dir: "data/dev_set/test/oracle_target"
+                    n_sources: 3
+                    label_set: dcase2025t4
+                    label_vector_mode: concat
+                    sr: 32000
+
+lightning_module:
+    module: src.training.lightningmodule.sound_event_detection
+    main: SoundEventDetection
+    args:
+        model:
+            module: src.models.wrapper
+            main: Wrapper
+            args:
+                model_name: m2d
+                checkpoint: strong
+                num_classes: 18
+                ref_channel: 0
+                data_sr: 32000
+                target_sr: 16000
+                down_up_sample: true
+                head_type: attention
+                use_head_norm: true
+        loss:
+            module: src.training.loss.snr
+            main: get_loss_func
+        optimizer:
+            module: torch.optim
+            main: AdamW
+            split_params: false
+            args:
+                params: null
+                lr: 0.001
+                betas: [0.9, 0.999]
+                eps: 0.00000001
+                weight_decay: 0.0
+                amsgrad: true
+        lr_scheduler:
+            schedule_mode: cos
+            num_warmup_steps: 12000
+            lr_end: 2e-7
+        is_validation: true
+        mixup_p: 0.0
+        weak_loss_weight: 0.5
+
+train:
+    trainer:
+        module: lightning.pytorch
+        main: Trainer
+        compile: false
+        torch_flags: false
+        channels_last: false
+        args:
+            accelerator: auto
+            devices: auto
+            strategy: auto
+            num_nodes: 1
+            precision: 32-true
+            logger: null
+            fast_dev_run: False
+            max_epochs: 1
+            log_every_n_steps: 50
+            use_distributed_sampler: True
+            sync_batchnorm: False
+            check_val_every_n_epoch: 1
+            val_check_interval: 1.0
+            num_sanity_val_steps: 0
+            enable_checkpointing: False
+            enable_progress_bar: True
+            enable_model_summary: False
+            limit_train_batches: null
+            limit_val_batches: null
+            gradient_clip_val: 0.5
+            accumulate_grad_batches: 1

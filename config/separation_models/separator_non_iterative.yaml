@@ -1,0 +1,201 @@
+# Non-Iterative Separator Configuration
+# Base configuration for all non-iterative separator models
+
+task_name: separator_non_iterative
+description: Non-iterative separator models (baseline, ablations)
+
+# Wandb configuration
+wandb_entity: cp_tobi
+
+# Data copying configuration
+# Set to false to disable copying data to local storage (slower but uses less disk space)
+enable_data_copy: true
+
+deterministic: true
+manual_seed: 0
+
+datamodule:
+    module: src.datamodules.datamodule
+    main: DataModule
+    args:
+        train_dataloader:
+            batch_size: 4  # Can be overridden via CLI
+            num_workers: 16
+            persistent_workers: false
+            dataset:
+                module: src.datamodules.dataset.s5.dataset_s5
+                main: DatasetS5
+                args:
+                    config:
+                        spatialscaper:
+                            foreground_dir: "data/dev_set/sound_event/train"
+                            background_dir: "data/dev_set/noise/train"
+                            rir_dir: "data/dev_set/room_ir/train"
+                            interference_dir: "data/dev_set/interference/train"
+                            duration: 10.0
+                            sr: 32000
+                            max_event_overlap: 3
+                            ref_db: -50
+                            return_dry: true
+                            return_wet: false
+                            return_ir: false
+                            return_background: false
+                            ref_channel: 0
+                            spatialize_direct_path_time_ms: [6, 50]
+                        snr_range: [5, 20]
+                        nevent_range: [1, 3]
+                        inteference_snr_range: [0, 15]
+                        ninterference_range: [1, 2]
+                        dataset_length: 100 # 000  # TODO: fix that! set to 100 for testing
+                        shuffle_label: false
+                    use_full: false
+                    use_additional_irs: false
+                    use_additional_backgrounds: false
+                    n_sources: 3
+                    label_set: dcase2025t4
+                    return_dry: true
+                    label_vector_mode: concat
+                    checking: false
+        val_dataloader:
+            batch_size: 2  # Can be overridden via CLI
+            num_workers: 16
+            persistent_workers: false
+            dataset:
+                module: src.datamodules.dataset.s5.dataset_s5
+                main: DatasetS5
+                args:
+                    config: 'data/dev_set/metadata/valid.json'
+                    n_sources: 3
+                    label_set: dcase2025t4
+                    return_dry: true
+                    label_vector_mode: concat
+                    checking: false
+
+lightning_module:
+    module: src.training.lightningmodule.labelqueried_1lb_separation
+    main: LabelQueriedSeparationLightning1LB
+    args:
+        model:
+            module: src.models.audiosep_resunet.resunet
+            main: ResUNet30
+            args:
+                input_channels: 4
+                output_channels: 1
+                condition_size: 512
+                target_sources_num: 1
+                label_len: 18
+                use_time_film: true  # Can be overridden via CLI
+                time_film_mode: 'additive'
+                channels_last: true
+                load_pretrained: true
+                hop_size: 160
+                window_size: 2048
+                binarize_sed_preds: false
+                max_iterations: 0  # Non-iterative
+                detach_feedback: true
+                dprnn:
+                    use: false  # Can be overridden via CLI
+                    post_sb: true
+                    type: GRU
+                    layers: 2
+                    hidden: 256
+                    dropout: 0.1
+        soundbeam:
+            apply: true  # Can be overridden via CLI
+            merge_method: add
+            trainable: true  # Can be overridden via CLI
+            lr: 0.0004
+            lr_decay_factor: 0.9
+            tagger_model:
+                module: src.models.wrapper
+                main: Wrapper
+                args:
+                    model_name: m2d
+                    checkpoint: slok9mxd
+                    head_type: 'attention'
+                    use_head_norm: false
+                    num_classes: 18
+                    ref_channel: 0
+                    data_sr: 32000
+                    target_sr: 16000
+                    down_up_sample: true
+        evaluation_tagger_model:
+            module: src.models.m2dat.m2dat
+            main: M2dAt
+            args:
+                weight_file: checkpoint/m2d_as_vit_base-80x1001p16x16p32k-240413_AS-FT_enconly/weights_ep69it3124-0.47998.pth
+                checkpoint: baseline
+                num_classes: 18
+                ref_channel: 0
+        loss:
+            module: src.training.loss.snr
+            main: get_loss_func
+        optimizer:
+            module: torch.optim
+            main: AdamW
+            split_params: true
+            lr_decay_factor: 0.2
+            lr_dprnn: null  # Can be overridden via CLI
+            args:
+                params: null
+                lr: 0.001
+                betas: [0.9, 0.999]
+                eps: 0.00000001
+                weight_decay: 0.0
+                amsgrad: true
+        lr_scheduler:
+            schedule_mode: cos
+            num_warmup_steps: 12000
+            lr_end: 2e-7
+        is_validation: true
+
+train:
+    callbacks:
+        -
+            name: checkpoint
+            module: lightning.pytorch.callbacks
+            main: ModelCheckpoint
+            args:
+                every_n_epochs: 1
+                filename: "{epoch}"
+                save_top_k: 1
+                save_last: True
+                monitor: epoch_val/loss
+                mode: min
+                verbose: False
+                dirpath: null
+        -
+            name: tqdm
+            module: lightning.pytorch.callbacks
+            main: TQDMProgressBar
+            args:
+                refresh_rate: 1
+                process_position: 0
+    trainer:
+        module: lightning.pytorch
+        main: Trainer
+        compile: true
+        torch_flags: true
+        channels_last: true
+        args:
+            accelerator: auto
+            devices: auto
+            strategy: ddp_find_unused_parameters_true
+            num_nodes: 1
+            precision: 32-true
+            logger: null
+            fast_dev_run: False
+            max_epochs: 36
+            log_every_n_steps: 100
+            use_distributed_sampler: True
+            sync_batchnorm: True
+            check_val_every_n_epoch: 1
+            val_check_interval: 1.0
+            num_sanity_val_steps: 0
+            enable_checkpointing: True
+            enable_progress_bar: True
+            enable_model_summary: True
+            limit_train_batches: null
+            limit_val_batches: null
+            gradient_clip_val: 0.5
+            accumulate_grad_batches: 1
