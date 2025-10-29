@@ -14,6 +14,13 @@ Our system consists of two components:
 
 The system uses a novel **Soundbeam** conditioning mechanism that enables the separator to leverage embeddings from a pre-trained sound event detection model to guide source separation.
 
+
+## Current State of Repository
+
+- The training code is fully functional and should allow reproduction of all results in the paper.
+- The evaluation / test code is not functional yet, will be fixed next week. 
+- The pre-trained checkpoints will be made available next week as well. 
+
 ## Method
 
 ![Architecture](imgs/figure1.png)
