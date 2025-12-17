@@ -8,10 +8,10 @@ description: Train M2D sound event detection model
 wandb_entity: cp_tobi
 
 # Data copying configuration
-# Set to false to disable copying data to local storage (slower but uses less disk space)
-enable_data_copy: true
+# Set to False to disable copying data to local storage (slower but uses less disk space)
+enable_data_copy: True
 
-deterministic: true
+deterministic: True
 manual_seed: 0
 
 datamodule:
@@ -21,7 +21,7 @@ datamodule:
         train_dataloader:
             batch_size: 32
             num_workers: 16
-            persistent_workers: false
+            persistent_workers: False
             dataset:
                 module: src.datamodules.dataset.s5.dataset_s5
                 main: DatasetS5
@@ -36,10 +36,10 @@ datamodule:
                             sr: 32000
                             max_event_overlap: 3
                             ref_db: -50
-                            return_dry: false
-                            return_wet: false
-                            return_ir: false
-                            return_background: false
+                            return_dry: False
+                            return_wet: False
+                            return_ir: False
+                            return_background: False
                             ref_channel: -1
                             spatialize_direct_path_time_ms: null
                         snr_range: [5, 20]
@@ -47,18 +47,18 @@ datamodule:
                         inteference_snr_range: [0, 15]
                         ninterference_range: [1, 2]
                         dataset_length: 10000
-                        shuffle_label: false
-                    use_full: false
+                        shuffle_label: False
+                    use_full: False
                     n_sources: 3
                     label_set: dcase2025t4
-                    return_dry: false
+                    return_dry: False
                     label_vector_mode: multihot
-                    checking: false
-                    use_additional_irs: false
+                    checking: False
+                    use_additional_irs: False
         val_dataloader:
             batch_size: 32
             num_workers: 5
-            persistent_workers: false
+            persistent_workers: False
             dataset:
                 module: src.datamodules.dataset.s5.dataset_s5
                 main: DatasetS5
@@ -66,9 +66,23 @@ datamodule:
                     config: 'data/dev_set/metadata/valid.json'
                     n_sources: 3
                     label_set: dcase2025t4
-                    return_dry: false
+                    return_dry: False
                     label_vector_mode: multihot
-                    checking: false
+                    checking: False
+        test_dataloader:
+            batch_size: 2
+            num_workers: 16
+            persistent_workers: False
+            dataset:
+                module: src.datamodules.dataset.s5.dataset_s5_waveform
+                main: DatasetS5Waveform
+                args:
+                    soundscape_dir: "data/dev_set/test/soundscape"
+                    oracle_target_dir: "data/dev_set/test/oracle_target"
+                    n_sources: 3
+                    label_set: dcase2025t4
+                    label_vector_mode: concat
+                    sr: 32000
 
 lightning_module:
     module: src.training.lightningmodule.sound_event_detection
@@ -87,7 +101,7 @@ lightning_module:
                 down_up_sample: True
                 head_type: attention
                 freq_warp_p: 0.0
-                use_head_norm: true
+                use_head_norm: False  # maybe set to True
                 seq_model_type: null
         mixup_p: 0.0
         weak_loss_weight: 0.5
@@ -97,7 +111,7 @@ lightning_module:
         optimizer:
             module: torch.optim
             main: AdamW
-            split_params: true
+            split_params: True
             lr_decay_factor: 0.8
             args:
                 params: null
@@ -105,12 +119,12 @@ lightning_module:
                 betas: [0.9, 0.999]
                 eps: 0.00000001
                 weight_decay: 0.0
-                amsgrad: true
+                amsgrad: True
         lr_scheduler:
             schedule_mode: cos
             num_warmup_steps: 4000
             lr_end: 2e-7
-        is_validation: true
+        is_validation: True
 
 train:
     callbacks:

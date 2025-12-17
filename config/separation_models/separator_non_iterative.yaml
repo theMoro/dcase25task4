@@ -8,10 +8,10 @@ description: Non-iterative separator models (baseline, ablations)
 wandb_entity: cp_tobi
 
 # Data copying configuration
-# Set to false to disable copying data to local storage (slower but uses less disk space)
-enable_data_copy: true
+# Set to False to disable copying data to local storage (slower but uses less disk space)
+enable_data_copy: True
 
-deterministic: true
+deterministic: True
 manual_seed: 0
 
 datamodule:
@@ -21,7 +21,7 @@ datamodule:
         train_dataloader:
             batch_size: 4  # Can be overridden via CLI
             num_workers: 16
-            persistent_workers: false
+            persistent_workers: False
             dataset:
                 module: src.datamodules.dataset.s5.dataset_s5
                 main: DatasetS5
@@ -36,30 +36,30 @@ datamodule:
                             sr: 32000
                             max_event_overlap: 3
                             ref_db: -50
-                            return_dry: true
-                            return_wet: false
-                            return_ir: false
-                            return_background: false
+                            return_dry: True
+                            return_wet: False
+                            return_ir: False
+                            return_background: False
                             ref_channel: 0
                             spatialize_direct_path_time_ms: [6, 50]
                         snr_range: [5, 20]
                         nevent_range: [1, 3]
                         inteference_snr_range: [0, 15]
                         ninterference_range: [1, 2]
-                        dataset_length: 100 # 000  # TODO: fix that! set to 100 for testing
-                        shuffle_label: false
-                    use_full: false
-                    use_additional_irs: false
-                    use_additional_backgrounds: false
+                        dataset_length: 100000
+                        shuffle_label: False
+                    use_full: False
+                    use_additional_irs: False
+                    use_additional_backgrounds: False
                     n_sources: 3
                     label_set: dcase2025t4
-                    return_dry: true
+                    return_dry: True
                     label_vector_mode: concat
-                    checking: false
+                    checking: False
         val_dataloader:
             batch_size: 2  # Can be overridden via CLI
             num_workers: 16
-            persistent_workers: false
+            persistent_workers: False
             dataset:
                 module: src.datamodules.dataset.s5.dataset_s5
                 main: DatasetS5
@@ -67,9 +67,9 @@ datamodule:
                     config: 'data/dev_set/metadata/valid.json'
                     n_sources: 3
                     label_set: dcase2025t4
-                    return_dry: true
+                    return_dry: True
                     label_vector_mode: concat
-                    checking: false
+                    checking: False
 
 lightning_module:
     module: src.training.lightningmodule.labelqueried_1lb_separation
@@ -84,26 +84,26 @@ lightning_module:
                 condition_size: 512
                 target_sources_num: 1
                 label_len: 18
-                use_time_film: true  # Can be overridden via CLI
+                use_time_film: True  # Can be overridden via CLI
                 time_film_mode: 'additive'
-                channels_last: true
-                load_pretrained: true
+                channels_last: True
+                load_pretrained: True
                 hop_size: 160
                 window_size: 2048
-                binarize_sed_preds: false
+                binarize_sed_preds: False
                 max_iterations: 0  # Non-iterative
-                detach_feedback: true
+                detach_feedback: True
                 dprnn:
-                    use: false  # Can be overridden via CLI
-                    post_sb: true
+                    use: False  # Can be overridden via CLI
+                    post_sb: True
                     type: GRU
                     layers: 2
                     hidden: 256
                     dropout: 0.1
         soundbeam:
-            apply: true  # Can be overridden via CLI
+            apply: True  # Can be overridden via CLI
             merge_method: add
-            trainable: true  # Can be overridden via CLI
+            trainable: True  # Can be overridden via CLI
             lr: 0.0004
             lr_decay_factor: 0.9
             tagger_model:
@@ -113,12 +113,12 @@ lightning_module:
                     model_name: m2d
                     checkpoint: slok9mxd
                     head_type: 'attention'
-                    use_head_norm: false
+                    use_head_norm: False
                     num_classes: 18
                     ref_channel: 0
                     data_sr: 32000
                     target_sr: 16000
-                    down_up_sample: true
+                    down_up_sample: True
         evaluation_tagger_model:
             module: src.models.m2dat.m2dat
             main: M2dAt
@@ -133,7 +133,7 @@ lightning_module:
         optimizer:
             module: torch.optim
             main: AdamW
-            split_params: true
+            split_params: True
             lr_decay_factor: 0.2
             lr_dprnn: null  # Can be overridden via CLI
             args:
@@ -142,12 +142,12 @@ lightning_module:
                 betas: [0.9, 0.999]
                 eps: 0.00000001
                 weight_decay: 0.0
-                amsgrad: true
+                amsgrad: True
         lr_scheduler:
             schedule_mode: cos
             num_warmup_steps: 12000
             lr_end: 2e-7
-        is_validation: true
+        is_validation: True
 
 train:
     callbacks:
@@ -174,9 +174,9 @@ train:
     trainer:
         module: lightning.pytorch
         main: Trainer
-        compile: true
-        torch_flags: true
-        channels_last: true
+        compile: True
+        torch_flags: True
+        channels_last: True
         args:
             accelerator: auto
             devices: auto
@@ -198,4 +198,4 @@ train:
             limit_train_batches: null
             limit_val_batches: null
             gradient_clip_val: 0.5
-            accumulate_grad_batches: 1
+            accumulate_grad_batches: 2

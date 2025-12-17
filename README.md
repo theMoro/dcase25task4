@@ -12,14 +12,14 @@ Our system consists of two components:
 1. **Sound Event Detection (SED) Model**: M2D-based tagger for detecting sound events in mixtures
 2. **Source Separation Model**: ResUNet-based separator with Soundbeam conditioning and optional iterative refinement
 
-The system uses a novel **Soundbeam** conditioning mechanism that enables the separator to leverage embeddings from a pre-trained sound event detection model to guide source separation.
+The system uses a novel conditioning mechanism that enables the separator to leverage embeddings from a pre-trained sound event detection model to guide source separation.
 
 
 ## Current State of Repository
 
 - The training code is fully functional and should allow reproduction of all results in the paper.
-- The evaluation / test code is not functional yet, will be fixed next week. 
-- The pre-trained checkpoints will be made available next week as well. 
+- The evaluation / test code is not functional yet, will be fixed soon. 
+- The pre-trained checkpoints will be made available soon. 
 
 ## Method
 
@@ -32,7 +32,7 @@ The system uses a novel **Soundbeam** conditioning mechanism that enables the se
 *Table 1: Quantitative results on DCASE 2025 Task 4 test set*
 
 ![Iterative Refinement Mechanism](imgs/figure2.png)
-*Figure 2: Performance of models using the iterative refinement mechanism with different values for the maximal number of iterations used during training. *
+*Figure 2: Performance of models using the iterative refinement mechanism with different values for the maximal number of iterations used during training.*
 
 ## Environment Setup
 

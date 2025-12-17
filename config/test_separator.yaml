@@ -5,9 +5,9 @@
 wandb_entity: cp_tobi
 
 # Data copying configuration
-enable_data_copy: true
+enable_data_copy: True
 
-deterministic: true
+deterministic: True
 manual_seed: 0
 
 datamodule:
@@ -17,7 +17,7 @@ datamodule:
         test_dataloader:
             batch_size: 2
             num_workers: 16
-            persistent_workers: false
+            persistent_workers: False
             dataset:
                 module: src.datamodules.dataset.s5.dataset_s5_waveform
                 main: DatasetS5Waveform
@@ -42,26 +42,26 @@ lightning_module:
                 condition_size: 512
                 target_sources_num: 1
                 label_len: 18
-                use_time_film: true
+                use_time_film: True
                 time_film_mode: additive
-                channels_last: true
-                load_pretrained: true
+                channels_last: True
+                load_pretrained: True
                 hop_size: 160
                 window_size: 2048
-                binarize_sed_preds: false
+                binarize_sed_preds: False
                 max_iterations: 0
-                detach_feedback: true
+                detach_feedback: True
                 dprnn:
-                    use: false
-                    post_sb: true
+                    use: False
+                    post_sb: True
                     type: GRU
                     layers: 2
                     hidden: 256
                     dropout: 0.1
         soundbeam:
-            apply: true
+            apply: True
             merge_method: add
-            trainable: true
+            trainable: True
             lr: 0.0004
             lr_decay_factor: 0.9
             tagger_model:
@@ -71,12 +71,12 @@ lightning_module:
                     model_name: m2d
                     checkpoint: slok9mxd
                     head_type: attention
-                    use_head_norm: false
+                    use_head_norm: False
                     num_classes: 18
                     ref_channel: 0
                     data_sr: 32000
                     target_sr: 16000
-                    down_up_sample: true
+                    down_up_sample: True
         evaluation_tagger_model:
             module: src.models.m2dat.m2dat
             main: M2dAt
@@ -91,7 +91,7 @@ lightning_module:
         optimizer:
             module: torch.optim
             main: AdamW
-            split_params: true
+            split_params: True
             lr_decay_factor: 0.2
             lr_dprnn: null
             args:
@@ -100,21 +100,19 @@ lightning_module:
                 betas: [0.9, 0.999]
                 eps: 0.00000001
                 weight_decay: 0.0
-                amsgrad: true
+                amsgrad: True
         lr_scheduler:
             schedule_mode: cos
             num_warmup_steps: 12000
             lr_end: 2e-7
-        is_validation: true
-        eval_checkpoint: baseline
-
+        is_validation: True
 train:
     trainer:
         module: lightning.pytorch
         main: Trainer
-        compile: false
-        torch_flags: false
-        channels_last: false
+        compile: False
+        torch_flags: False
+        channels_last: False
         args:
             accelerator: auto
             devices: auto

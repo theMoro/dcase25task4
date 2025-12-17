@@ -183,12 +183,19 @@ def make_it_CLAP(model, checkpoint):
 
 
 def get_backbone(args, weight_file):
-    args.input_size, args.patch_size, args.sr, args.model = parse_sizes_by_name(Path(weight_file).parent.name)
+    name = Path(weight_file).parent.name if weight_file is not None \
+        else "m2d_clap_vit_base-80x1001p16x16-240128_AS-FT_enconly"
+    args.input_size, args.patch_size, args.sr, args.model = parse_sizes_by_name(name)
 
     # Create a ViT.
     model = LocalViT(
         in_chans=1, img_size=args.input_size, patch_size=args.patch_size, embed_dim=768, depth=12, num_heads=12,
         mlp_ratio=4, norm_layer=partial(torch.nn.LayerNorm, eps=1e-6))
+
+    if weight_file is None:
+        args.mean, args.std = -7.1, 4.2
+        model.eval()
+        return model, None
 
     # Load checkpoint.
     checkpoint = torch.load(weight_file, map_location='cpu')

@@ -71,8 +71,8 @@ class BaseLabelQueriedSeparationModule(BaseLightningModule):
             num_workers=batch_size * 2
         )
 
-        self.evaluation_tagger_model = evaluation_tagger_model
-        self.eval_checkpoint = self.evaluation_tagger_model['args']['checkpoint']
+        self.eval_checkpoint = evaluation_tagger_model['args']['checkpoint']
+        self.evaluation_tagger_model = initialize_config(evaluation_tagger_model)
 
         if soundbeam is None:
             soundbeam = {'apply': False}

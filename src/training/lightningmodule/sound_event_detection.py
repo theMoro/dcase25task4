@@ -209,53 +209,11 @@ class SoundEventDetection(BaseLightningModule):
 
     def test_step(self, batch_data_dict, batch_idx):
         """Test step for sound event detection model."""
-        self.model.eval()
-        
-        batchsize, loss_dict = self.test_step_processing(batch_data_dict, batch_idx)
-        
-        # Log all items in loss_dict
-        step_dict = {f'step_test/{name}': metric for name, metric in loss_dict.items()}
-        self.log_dict(step_dict, prog_bar=False, logger=True, on_epoch=False, on_step=True, sync_dist=True, batch_size=batchsize)
-        epoc_dict = {f'epoch_test/{name}': metric for name, metric in loss_dict.items()}
-        self.log_dict(epoc_dict, prog_bar=True, logger=True, on_epoch=True, on_step=False, sync_dist=True, batch_size=batchsize)
+        pass
 
     def test_step_processing(self, batch_data_dict, batch_idx):
         """Test step processing for sound event detection model."""
-        batchsize = batch_data_dict['mixture'].shape[0]
-
-        input_dict = {
-            'waveform': batch_data_dict['mixture'],
-            # [bs, nch, wlen] = [bs, 4, 320_000]
-        }
-
-        label_strong = self._get_strong_labels(batch_data_dict['on_offset'],
-                                               batch_data_dict['sr'],
-                                               batch_data_dict['duration'],
-                                               self.model.seq_len)
-        label_strong = label_strong.to(batch_data_dict['label_vector'].device)
-
-        output_dict = self.model(input_dict)
-        output_strong = {"probabilities": output_dict['probabilities_strong']}
-        output_weak = {"probabilities": output_dict['probabilities']}
-
-        target_strong = {'probabilities': label_strong}
-        target_weak = {'probabilities': batch_data_dict['label_vector']}
-
-        loss_strong = self.loss_func(output_strong, target_strong)["loss"]
-        loss_weak = self.loss_func(output_weak, target_weak)["loss"]
-
-        loss = self.weak_loss_weight * loss_weak + (1 - self.weak_loss_weight) * loss_strong
-        loss_dict = {"loss": loss, "loss_weak": loss_weak, "loss_strong": loss_strong}
-
-        target_dict = {'probabilities': batch_data_dict['label_vector']}
-
-        loss_dict = {k: v.item() for k, v in loss_dict.items()}
-        if self.metric_func:  # add metrics
-            metric = self.metric_func(output_dict, target_dict)
-            for k, v in metric.items():  # metric return [bs] for better calculation of mean
-                loss_dict[k] = v.mean().item()  # torch tensor size [bs]
-
-        return batchsize, loss_dict
+        pass
 
     def on_test_epoch_end(self):
         """Test epoch end processing for comprehensive evaluation."""
@@ -272,30 +230,16 @@ class SoundEventDetection(BaseLightningModule):
                 tagger_obj=self.model
             )
 
-            # Measure evaluation time
             start_time = time.time()
-
-            # Evaluate using comprehensive SED evaluation
-            test_result = evaluate_sed(
-                sed_model=s5_model,
+            test_result = evaluate_tagger(
+                tagger=s5_model,
                 dataloader=test_dataloader,
-                class_labels=LABELS['dcase2025t4'],
                 phase="test"
             )
             end_time = time.time()
             print(f"Evaluation time test set: {end_time - start_time:.2f} seconds")
 
-            # Logging
+            # --- Logging ---
             # Accuracy per threshold
-            for pthre, acc in test_result["accuracy_per_threshold"].items():
-                self.log(f"test_acc@{pthre:.1f}", acc, on_epoch=True, sync_dist=False)
-            
-            # Segment-based pAUC (mean)
-            self.log("test_pauroc", test_result["segment_pauc_mean"], on_epoch=True, sync_dist=False)
-            
-            # Print summary
-            print("=== Test Results Summary ===")
-            for pthre, acc in test_result["accuracy_per_threshold"].items():
-                print(f"Test Accuracy @ {pthre:.1f}: {acc:.2f}%")
-            print(f"Test pAUC: {test_result['segment_pauc_mean']:.4f}")
-            print("===========================")
+            for p in test_result:
+                self.log(f"epoch_test/test_acc@{p:.1f}", test_result[p], on_epoch=True, sync_dist=False)

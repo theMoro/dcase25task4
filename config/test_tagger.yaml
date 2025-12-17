@@ -5,9 +5,9 @@
 wandb_entity: cp_tobi
 
 # Data copying configuration
-enable_data_copy: true
+enable_data_copy: True
 
-deterministic: true
+deterministic: True
 manual_seed: 0
 
 datamodule:
@@ -17,7 +17,7 @@ datamodule:
         test_dataloader:
             batch_size: 2
             num_workers: 16
-            persistent_workers: false
+            persistent_workers: False
             dataset:
                 module: src.datamodules.dataset.s5.dataset_s5_waveform
                 main: DatasetS5Waveform
@@ -43,28 +43,28 @@ lightning_module:
                 ref_channel: 0
                 data_sr: 32000
                 target_sr: 16000
-                down_up_sample: true
+                down_up_sample: True
                 head_type: attention
-                use_head_norm: true
+                use_head_norm: False
         loss:
             module: src.training.loss.snr
             main: get_loss_func
         optimizer:
             module: torch.optim
             main: AdamW
-            split_params: false
+            split_params: False
             args:
                 params: null
                 lr: 0.001
                 betas: [0.9, 0.999]
                 eps: 0.00000001
                 weight_decay: 0.0
-                amsgrad: true
+                amsgrad: True
         lr_scheduler:
             schedule_mode: cos
             num_warmup_steps: 12000
             lr_end: 2e-7
-        is_validation: true
+        is_validation: True
         mixup_p: 0.0
         weak_loss_weight: 0.5
 
@@ -72,9 +72,9 @@ train:
     trainer:
         module: lightning.pytorch
         main: Trainer
-        compile: false
-        torch_flags: false
-        channels_last: false
+        compile: False
+        torch_flags: False
+        channels_last: False
         args:
             accelerator: auto
             devices: auto

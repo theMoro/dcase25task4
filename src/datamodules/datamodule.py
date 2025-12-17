@@ -13,18 +13,29 @@ def initialize_config(module_cfg):
 class DataModule(pl.LightningDataModule):
     def __init__(
         self,
-        train_dataloader: dict,
+        train_dataloader: dict = None,
         val_dataloader: dict = None,
+        test_dataloader: dict = None
     ):
         super().__init__()
         self.train_config = train_dataloader
         self.val_config = val_dataloader
+        self.test_config = test_dataloader
 
-        self.train_dataset = initialize_config(self.train_config['dataset'])
-        if val_dataloader is not None:            
+        if train_dataloader is not None:
+            self.train_dataset = initialize_config(self.train_config['dataset'])
+        else:
+            self.train_dataset = None
+
+        if val_dataloader is not None:
             self.val_dataset = initialize_config(self.val_config['dataset'])
         else:
             self.val_dataset = None
+
+        if test_dataloader is not None:
+            self.test_dataset = initialize_config(self.test_config['dataset'])
+        else:
+            self.test_dataset = None
 
 
     def prepare_data(self):
@@ -36,17 +47,18 @@ class DataModule(pl.LightningDataModule):
         
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         r"""Get train loader."""
-        train_loader = DataLoader(
-            dataset=self.train_dataset,
-            batch_size=self.train_config['batch_size'],
-            collate_fn=self.train_dataset.collate_fn,
-            num_workers=self.train_config['num_workers'],
-            pin_memory=True,
-            persistent_workers=self.train_config['persistent_workers'],
-            shuffle=True
-        )
+        if self.train_dataset is not None:
+            train_loader = DataLoader(
+                dataset=self.train_dataset,
+                batch_size=self.train_config['batch_size'],
+                collate_fn=self.train_dataset.collate_fn,
+                num_workers=self.train_config['num_workers'],
+                pin_memory=True,
+                persistent_workers=self.train_config['persistent_workers'],
+                shuffle=True
+            )
 
-        return train_loader
+            return train_loader
 
     def val_dataloader(self):
         if self.val_dataset is not None:
@@ -62,7 +74,15 @@ class DataModule(pl.LightningDataModule):
             return val_dataloder
 
     def test_dataloader(self):
-        pass
+        if self.test_dataset is not None:
+            test_dataloader = DataLoader(
+                dataset=self.test_dataset,
+                batch_size=self.test_config['batch_size'],
+                shuffle=False,
+                collate_fn=self.test_dataset.collate_fn,
+                num_workers=self.test_config['batch_size'] * 2
+            )
+            return test_dataloader
 
     def teardown(self, stage=None):
         pass

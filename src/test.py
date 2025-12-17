@@ -8,7 +8,8 @@ from munch import DefaultMunch
 from pytorch_lightning.loggers import WandbLogger
 import lightning.pytorch as pl
 
-from src.utils import parse_yaml, initialize_config, ignore_warnings, setup_local_data_copy, update_dataset_paths_in_config
+from src.training.lightningmodule.helper import load_ckpt
+from src.utils import parse_yaml, initialize_config, ignore_warnings, setup_local_data_copy
 from src.paths import LOG_PATH, CKPT_PATH, DATA_PATH, LOCAL_DATA_PATH, NODE_LOCK_DIR_PATH
 
 ignore_warnings()
@@ -37,9 +38,9 @@ def get_wandb_logger(config_dict, name=None, project="DCASE25_Task4", rank0_only
     return wandb_logger
 
 
-def main(config_file, checkpoint_path, wandb_project="DCASE25_Task4", wandb_name=None):
+def main(config_file, tagger_checkpoint_path=None, separator_checkpoint_path=None, wandb_project="DCASE25_Task4", wandb_name=None):
     """Main testing function."""
-    
+
     # Parse config
     config_dict = parse_yaml(config_file)
     config_dict['config_yaml_file'] = config_file
@@ -74,7 +75,13 @@ def main(config_file, checkpoint_path, wandb_project="DCASE25_Task4", wandb_name
     )
     
     # Update dataset paths in config to use the appropriate data path
-    update_dataset_paths_in_config(config_dict, data_path_to_use)
+    config_test = config_dict['datamodule']['args']['test_dataloader']['dataset']['args']['soundscape_dir']
+    config_dict['datamodule']['args']['test_dataloader']['dataset']['args']['soundscape_dir'] = os.path.join(
+        data_path_to_use, config_test[len('data/dev_set/'):])
+
+    config_test = config_dict['datamodule']['args']['test_dataloader']['dataset']['args']['oracle_target_dir']
+    config_dict['datamodule']['args']['test_dataloader']['dataset']['args']['oracle_target_dir'] = os.path.join(
+        data_path_to_use, config_test[len('data/dev_set/'):])
     
     # Setup logger
     logger = None
@@ -112,35 +119,25 @@ def main(config_file, checkpoint_path, wandb_project="DCASE25_Task4", wandb_name
     pl_model = initialize_config(configs['lightning_module'])
     
     # Load checkpoint
-    print(f'Loading checkpoint: {checkpoint_path}')
-    
+    print(f'Loading checkpoint: \nTagger: {tagger_checkpoint_path} \nSeparator: {separator_checkpoint_path}')
+
     # For separator models, we need to preserve evaluation_tagger_model config
     # Check if this is a separator model (has evaluation_tagger_model)
-    is_separator_model = hasattr(pl_model, 'evaluation_tagger_model') and pl_model.evaluation_tagger_model is not None
-    
-    if is_separator_model:
-        # Store essential config attributes before loading checkpoint
-        evaluation_tagger_model_config = pl_model.evaluation_tagger_model
-        label_set = pl_model.label_set
-        labels = pl_model.labels
-        onehots = pl_model.onehots
-        label_onehots = pl_model.label_onehots
-        
-        # Load checkpoint
-        pl_model = pl_model.load_from_checkpoint(checkpoint_path)
-        
-        # Restore essential config attributes after loading checkpoint
-        pl_model.evaluation_tagger_model = evaluation_tagger_model_config
-        pl_model.eval_checkpoint = evaluation_tagger_model_config['args']['checkpoint']  # Re-derive from config
-        pl_model.label_set = label_set
-        pl_model.labels = labels
-        pl_model.onehots = onehots
-        pl_model.label_onehots = label_onehots
-        
-        print("Restored evaluation configuration after checkpoint loading")
+    evaluate_separator = hasattr(pl_model, 'evaluation_tagger_model') and pl_model.evaluation_tagger_model is not None
+
+    if evaluate_separator:
+        load_ckpt(separator_checkpoint_path, pl_model.model)
+        load_ckpt(separator_checkpoint_path, pl_model.embedding_model)
+
+        if configs['lightning_module']['args']['evaluation_tagger_model']['args']['checkpoint'] == 'baseline':
+            tagger_ckpt = "checkpoint/m2dat.ckpt"
+            load_ckpt(tagger_ckpt, pl_model.evaluation_tagger_model)
+        else:
+            pass  # TODO: implement the code for when the tagger model is an instance of the wrapper class
+
     else:
         # For tagger models, just load the checkpoint normally
-        pl_model = pl_model.load_from_checkpoint(checkpoint_path)
+        load_ckpt(tagger_checkpoint_path, pl_model.model)
     
     # Initialize trainer
     configs['train']['trainer']['args']['logger'] = logger
@@ -161,7 +158,8 @@ def main(config_file, checkpoint_path, wandb_project="DCASE25_Task4", wandb_name
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test DCASE 2025 Task 4 models")
     parser.add_argument("--config", "-c", type=str, required=True, help="Path to config YAML file")
-    parser.add_argument("--checkpoint", type=str, required=True, help="Path to checkpoint to test")
+    parser.add_argument("--tagger_checkpoint_path", type=str, required=True, help="Path to checkpoint of tagger model to test")
+    parser.add_argument("--separator_checkpoint_path", type=str, required=False, default=None, help="Path to checkpoint of separator model to test")
     parser.add_argument("--wandb_project", type=str, default="DCASE25_Task4", help="Wandb project name")
     parser.add_argument("--wandb_name", type=str, default=None, help="Wandb run name")
     
@@ -169,7 +167,8 @@ if __name__ == "__main__":
     
     main(
         config_file=args.config,
-        checkpoint_path=args.checkpoint,
+        tagger_checkpoint_path=args.tagger_checkpoint_path,
+        separator_checkpoint_path=args.separator_checkpoint_path,
         wandb_project=args.wandb_project,
         wandb_name=args.wandb_name
     )
