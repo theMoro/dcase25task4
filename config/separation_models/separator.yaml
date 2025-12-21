@@ -95,12 +95,12 @@ lightning_module:
                 detach_feedback: True
                 dprnn:
                     use: False  # Can be overridden via CLI
-                    post_sb: True
+                    post_embedding_injection: True
                     type: GRU
                     layers: 2
                     hidden: 256
                     dropout: 0.1
-        soundbeam:
+        embedding_injection:
             apply: True  # Can be overridden via CLI
             merge_method: add
             trainable: True  # Can be overridden via CLI
@@ -111,7 +111,7 @@ lightning_module:
                 main: Wrapper
                 args:
                     model_name: m2d
-                    checkpoint: slok9mxd
+                    checkpoint: strong
                     head_type: 'attention'
                     use_head_norm: False
                     num_classes: 18

@@ -69,21 +69,6 @@ datamodule:
                     return_dry: False
                     label_vector_mode: multihot
                     checking: False
-        test_dataloader:
-            batch_size: 2
-            num_workers: 16
-            persistent_workers: False
-            dataset:
-                module: src.datamodules.dataset.s5.dataset_s5_waveform
-                main: DatasetS5Waveform
-                args:
-                    soundscape_dir: "data/dev_set/test/soundscape"
-                    oracle_target_dir: "data/dev_set/test/oracle_target"
-                    n_sources: 3
-                    label_set: dcase2025t4
-                    label_vector_mode: concat
-                    sr: 32000
-
 lightning_module:
     module: src.training.lightningmodule.sound_event_detection
     main: SoundEventDetection
@@ -101,7 +86,7 @@ lightning_module:
                 down_up_sample: True
                 head_type: attention
                 freq_warp_p: 0.0
-                use_head_norm: False  # maybe set to True
+                use_head_norm: False
                 seq_model_type: null
         mixup_p: 0.0
         weak_loss_weight: 0.5

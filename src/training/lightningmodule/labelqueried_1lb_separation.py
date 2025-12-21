@@ -12,7 +12,7 @@ class LabelQueriedSeparationLightning1LB(BaseLabelQueriedSeparationModule):
             lr_scheduler: dict = None,
             is_validation: bool = False,
             metric: dict = None,
-            soundbeam: dict = None,
+            embedding_injection: dict = None,
             evaluation_tagger_model: dict = None,
     ):
         super().__init__(
@@ -22,7 +22,7 @@ class LabelQueriedSeparationLightning1LB(BaseLabelQueriedSeparationModule):
             lr_scheduler=lr_scheduler,
             is_validation=is_validation,
             metric=metric,
-            soundbeam=soundbeam,
+            embedding_injection=embedding_injection,
             evaluation_tagger_model=evaluation_tagger_model
         )
 

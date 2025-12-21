@@ -50,7 +50,7 @@ else:
     NODE_LOCK_DIR_PATH = "/tmp/"
 
 # DATA_PATH = '/path/to/dataset'  # TODO: replace with actual dataset path
-# LOCAL_DATA_PATH = DATA_PATH
+# LOCAL_DATA_PATH = DATA_PATH  # TODO: if you want to have the data somewhere locally, set this path accordingly
 
 LOG_PATH = os.path.join("outputs", "logs")
 CKPT_PATH = os.path.join("outputs", "checkpoints")

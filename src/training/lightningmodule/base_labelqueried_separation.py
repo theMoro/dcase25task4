@@ -2,6 +2,7 @@ import os
 import json
 import shutil
 import time
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import DataLoader
@@ -23,11 +24,11 @@ class BaseLabelQueriedSeparationModule(BaseLightningModule):
             lr_scheduler: dict = None,
             is_validation: bool = False,
             metric: dict = None,
-            soundbeam: dict = None,
+            embedding_injection: dict = None,
             evaluation_tagger_model: dict = None,
     ):
-        if soundbeam is not None and soundbeam['apply']:
-            model['args']['soundbeam'] = soundbeam  # pass the soundbeam config to the model
+        if embedding_injection is not None and embedding_injection['apply']:
+            model['args']['embedding_injection'] = embedding_injection  # pass the embedding_injection config to the model
 
         super().__init__(
             model=model,
@@ -74,18 +75,18 @@ class BaseLabelQueriedSeparationModule(BaseLightningModule):
         self.eval_checkpoint = evaluation_tagger_model['args']['checkpoint']
         self.evaluation_tagger_model = initialize_config(evaluation_tagger_model)
 
-        if soundbeam is None:
-            soundbeam = {'apply': False}
+        if embedding_injection is None:
+            embedding_injection = {'apply': False}
 
-        self.soundbeam = soundbeam
+        self.embedding_injection = embedding_injection
         self.embedding_model_is_trainable = False
 
-        if self.soundbeam['apply'] or model["args"]["use_time_film"]:
-            print("Soundbeam is enabled")
-            self.setup_soundbeam(self.soundbeam['tagger_model'], self.soundbeam['trainable'], self.soundbeam["lr"], self.soundbeam["lr_decay_factor"])
+        if self.embedding_injection['apply'] or model["args"]["use_time_film"]:
+            print("Embedding Injection is enabled")
+            self.setup_embedding_injection(self.embedding_injection['tagger_model'], self.embedding_injection['trainable'], self.embedding_injection["lr"], self.embedding_injection["lr_decay_factor"])
 
 
-    def setup_soundbeam(self, tagger_model_config, trainable=False, lr=None, lr_decay_factor=1.0):
+    def setup_embedding_injection(self, tagger_model_config, trainable=False, lr=None, lr_decay_factor=1.0):
         tagger = initialize_config(tagger_model_config)
 
         if tagger_model_config['args']['checkpoint'] == 'baseline':
@@ -135,7 +136,7 @@ class BaseLabelQueriedSeparationModule(BaseLightningModule):
         phase = 'val'
         s5_model.eval()
 
-        for batch in dataloader:
+        for batch in tqdm(dataloader):
             mixtures = batch['mixture'].to('cpu')  # [bs, nch, wlen]
 
             with torch.no_grad():
@@ -159,7 +160,7 @@ class BaseLabelQueriedSeparationModule(BaseLightningModule):
         """Save tagger predictions for validation and test sets at the start of training."""
 
         if self.trainer.is_global_zero:
-            if stage == "fit" or stage is None:
+            if stage in ["fit", "test"] or stage is None:
 
                 # Define file names
                 test_file = f'test_{self.eval_checkpoint}_tagger_predictions.json'
@@ -188,34 +189,36 @@ class BaseLabelQueriedSeparationModule(BaseLightningModule):
                     if os.path.exists(val_local_path):
                         os.remove(val_local_path)
 
-                    print("-" * 20, "\nCreating tagger predictions for test set...\n", "-" * 20, flush=True)
+                    print("-" * 20, "\nCreating tagger predictions for validation and test set...\n", "-" * 20, flush=True)
 
                     # Define tagger configuration
-                    # for evaluating, the baseline M2D model is standard! This is hardcoded (and has nothing to do with the model used for Soundbeam!)
-
                     if self.eval_checkpoint == 'baseline':
                         tagger_ckpt = "checkpoint/m2dat.ckpt"
                     else:
-                        raise ValueError("Tagger checkpoint not found or not specified.")
+                        tagger_ckpt = None
+                        # raise ValueError("Tagger checkpoint not found or not specified.")
 
                     # Create S5 model with only the tagger (no separator needed)
                     s5_model = S5(
-                        label_set=self.label_set,
-                        tagger_config=self.evaluation_tagger_model,
+                        tagger_config=None,
                         separator_config=None,
+                        label_set=self.label_set,
                         tagger_ckpt=tagger_ckpt,
-                        separator_ckpt=None
+                        separator_ckpt=None,
+                        tagger_obj=self.evaluation_tagger_model
                     )
 
                     # Save validation predictions
                     val_dataloader = self.trainer.datamodule.val_dataloader()
 
                     if val_dataloader:
+                        print("Creating predictions for validation set ...")
                         val_predictions = self._get_tagger_predictions(s5_model, val_dataloader)
                         with open(os.path.join(LOCAL_DATA_PATH, f'val_{self.eval_checkpoint}_tagger_predictions.json'), 'w') as f:
                             json.dump(val_predictions, f, indent=4)
 
                     # Save test predictions
+                    print("Creating predictions for test set ...")
                     test_predictions = self._get_tagger_predictions(s5_model, self.test_dataloader)
                     with open(os.path.join(LOCAL_DATA_PATH, f'test_{self.eval_checkpoint}_tagger_predictions.json'), 'w') as f:
                         json.dump(test_predictions, f, indent=4)

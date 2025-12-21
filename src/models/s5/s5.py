@@ -5,6 +5,28 @@ import torch.nn as nn
 from src.utils import LABELS, initialize_config
 
 
+def _map_soundbeam_to_embedding_injection(state_dict):
+    """
+    Map old 'soundbeam' parameter names to new 'embedding_injection' names for backward compatibility.
+    
+    Args:
+        state_dict: Dictionary of parameter names to tensors
+        
+    Returns:
+        Dictionary with updated parameter names
+    """
+    mapped_dict = {}
+    for key, value in state_dict.items():
+        # Replace 'soundbeam' with 'embedding_injection' in parameter names
+        new_key = key.replace('soundbeam_weights', 'embedding_injection_weights')
+        new_key = new_key.replace('weight_soundbeam_features', 'weight_embedding_injection_features')
+        new_key = new_key.replace('soundbeam_merge_method', 'embedding_injection_merge_method')
+        # General replacement for any remaining 'soundbeam' references
+        new_key = new_key.replace('soundbeam', 'embedding_injection')
+        mapped_dict[new_key] = value
+    return mapped_dict
+
+
 class S5(torch.nn.Module):
     """Simplified S5 model with single tagger and separator."""
     
@@ -16,7 +38,7 @@ class S5(torch.nn.Module):
         tagger_ckpt=None,
         separator_ckpt=None,
         tagger_obj=None,
-        soundbeam_config=None
+        embedding_injection_config=None
     ):
         super().__init__()
 
@@ -30,9 +52,9 @@ class S5(torch.nn.Module):
         # -------- Separator (single model) ------------------------
         self.separator = None
         if separator_config:
-            # Add soundbeam config to separator args if provided
-            if soundbeam_config is not None:
-                separator_config["args"]["soundbeam"] = soundbeam_config
+            # Add embedding_injection config to separator args if provided
+            if embedding_injection_config is not None:
+                separator_config["args"]["embedding_injection"] = embedding_injection_config
             
             self.separator = initialize_config(separator_config)
             self.separator.eval()
@@ -57,6 +79,9 @@ class S5(torch.nn.Module):
             ckpt_corresponding_key = [k for k in model_ckpt.keys() if k.endswith(one_model_key)]
             prefix = ckpt_corresponding_key[0][:-len(one_model_key)]
             model_ckpt = {k[len(prefix):]: v for k, v in model_ckpt.items() if k.startswith(prefix)}
+        
+        # Map old 'soundbeam' parameter names to 'embedding_injection' for backward compatibility
+        model_ckpt = _map_soundbeam_to_embedding_injection(model_ckpt)
         
         model.load_state_dict(model_ckpt)
 
@@ -120,7 +145,7 @@ class S5(torch.nn.Module):
             'label_vector': label_vector
         }
         
-        # Add embeddings if separator uses soundbeam
+        # Add embeddings if separator uses embedding_injection
         if hasattr(self.separator, 'embedding_model') and self.separator.embedding_model is not None:
             with torch.no_grad():
                 out_dict = self.separator.embedding_model({'waveform': batch_mixture}, return_features=True)

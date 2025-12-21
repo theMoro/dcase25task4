@@ -83,8 +83,8 @@ class BaseLightningModule(pl.LightningModule, PyTorchModelHubMixin):
 
         self.optimizer_config['args']['params'] = params  # modify if some parts are frozen
 
-        if not (isinstance(getattr(model['args'], "soundbeam", None), dict) and model['args']['soundbeam']["apply"] and model['args']['soundbeam']["trainable"]):
-            # not (soundbeam.apply and soundbeam.trainable)
+        if not (isinstance(getattr(model['args'], "embedding_injection", None), dict) and model['args']['embedding_injection']["apply"] and model['args']['embedding_injection']["trainable"]):
+            # not (embedding_injection.apply and embedding_injection.trainable)
             self.optimizer = initialize_config(self.optimizer_config)
 
         self.lr_scheduler_config = lr_scheduler
@@ -135,14 +135,14 @@ class BaseLightningModule(pl.LightningModule, PyTorchModelHubMixin):
         
         self.log_dict({"epoch/lr": self.optimizer.param_groups[0]['lr']},)  # this here results in a warning
 
-        if isinstance(getattr(self, "soundbeam", None), dict) and self.soundbeam.get("apply", False):
-            weights_dict = {f'weight_{i}': self.model.soundbeam_weights[i].item() for i in range(len(self.model.soundbeam_weights))}
+        if isinstance(getattr(self, "embedding_injection", None), dict) and self.embedding_injection.get("apply", False):
+            weights_dict = {f'weight_{i}': self.model.embedding_injection_weights[i].item() for i in range(len(self.model.embedding_injection_weights))}
             self.log_dict(weights_dict)
 
-            if self.soundbeam['merge_method'] == 'add':
-                if hasattr(self.model, "base") and hasattr(self.model.base, "weight_soundbeam_features"):
-                    # weight_soundbeam_features, weight_x_center
-                    self.log_dict({"weight_soundbeam_features": self.model.base.weight_soundbeam_features,
+            if self.embedding_injection['merge_method'] == 'add':
+                if hasattr(self.model, "base") and hasattr(self.model.base, "weight_embedding_injection_features"):
+                    # weight_embedding_injection_features, weight_x_center
+                    self.log_dict({"weight_embedding_injection_features": self.model.base.weight_embedding_injection_features,
                                    "weight_x_center": self.model.base.weight_x_center
                                    })
 

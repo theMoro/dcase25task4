@@ -15,7 +15,7 @@ datamodule:
     main: DataModule
     args:
         test_dataloader:
-            batch_size: 2
+            batch_size: 1
             num_workers: 16
             persistent_workers: False
             dataset:
@@ -53,12 +53,12 @@ lightning_module:
                 detach_feedback: True
                 dprnn:
                     use: False
-                    post_sb: True
+                    post_embedding_injection: True
                     type: GRU
                     layers: 2
                     hidden: 256
                     dropout: 0.1
-        soundbeam:
+        embedding_injection:
             apply: True
             merge_method: add
             trainable: True
@@ -69,22 +69,27 @@ lightning_module:
                 main: Wrapper
                 args:
                     model_name: m2d
-                    checkpoint: slok9mxd
-                    head_type: attention
-                    use_head_norm: False
+                    checkpoint: strong
                     num_classes: 18
                     ref_channel: 0
                     data_sr: 32000
                     target_sr: 16000
                     down_up_sample: True
+                    head_type: attention
+                    use_head_norm: False
         evaluation_tagger_model:
-            module: src.models.m2dat.m2dat
-            main: M2dAt
+            module: src.models.wrapper
+            main: Wrapper
             args:
-                weight_file: checkpoint/m2d_as_vit_base-80x1001p16x16p32k-240413_AS-FT_enconly/weights_ep69it3124-0.47998.pth
-                checkpoint: baseline
+                model_name: m2d
+                checkpoint: strong
                 num_classes: 18
                 ref_channel: 0
+                data_sr: 32000
+                target_sr: 16000
+                down_up_sample: True
+                head_type: attention
+                use_head_norm: False
         loss:
             module: src.training.loss.snr
             main: get_loss_func

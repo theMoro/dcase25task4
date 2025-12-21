@@ -7,6 +7,7 @@ import argparse
 from munch import DefaultMunch
 from pytorch_lightning.loggers import WandbLogger
 
+from src.training.lightningmodule.helper import load_ckpt
 from src.utils import parse_yaml, initialize_config, ignore_warnings, setup_local_data_copy, update_dataset_paths_in_config
 from src.paths import DATA_PATH, LOCAL_DATA_PATH
 
@@ -49,7 +50,8 @@ def get_wandb_logger(config_dict, name=None, project="DCASE25_Task4", rank0_only
 def main(config_file, resume_ckpt_path=None, wandb_project="DCASE25_Task4", wandb_name=None, resume_wandb_id=None,
          # Model configuration overrides
          max_iterations=None, use_time_film=None, use_dprnn=None, 
-         soundbeam_apply=None, soundbeam_trainable=None, lr_dprnn=None,
+         embedding_injection_apply=None, embedding_injection_wandb_id=None, embedding_injection_checkpoint_path=None,
+         embedding_injection_trainable=None, lr_dprnn=None,
          # Training configuration overrides
          train_batch_size=None, val_batch_size=None, learning_rate=None):
     """Main training function."""
@@ -57,7 +59,19 @@ def main(config_file, resume_ckpt_path=None, wandb_project="DCASE25_Task4", wand
     # Parse config
     config_dict = parse_yaml(config_file)
     config_dict['config_yaml_file'] = config_file
-    
+
+    if embedding_injection_wandb_id is not None and embedding_injection_checkpoint_path is not None:
+        raise ValueError("Unclear which model to use, if both embedding_injection_wandb_id and embedding_injection_checkpoint_path are used!")
+
+    # overwrite wandb_id used for embedding_injection
+    if embedding_injection_wandb_id is not None:
+        ckpt_in_yaml_file = config_dict["lightning_module"]["args"]["embedding_injection"]["tagger_model"]["args"]["checkpoint"]
+
+        if ckpt_in_yaml_file != "strong":
+            raise Warning(f"Overwriting checkpoint defined in YAML file ({ckpt_in_yaml_file}) with embedding_injection_wandb_id: {embedding_injection_wandb_id}!")
+
+        config_dict["lightning_module"]["args"]["embedding_injection"]["tagger_model"]["args"]["checkpoint"] = embedding_injection_wandb_id
+
     # Determine rank for multi-GPU training
     rank = 0
     if torch.distributed.is_initialized():
@@ -101,10 +115,10 @@ def main(config_file, resume_ckpt_path=None, wandb_project="DCASE25_Task4", wand
             config_dict['lightning_module']['args']['optimizer']['lr_dprnn'] = lr_dprnn
         elif not use_dprnn:
             config_dict['lightning_module']['args']['optimizer']['lr_dprnn'] = None
-    if soundbeam_apply is not None:
-        config_dict['lightning_module']['args']['soundbeam']['apply'] = soundbeam_apply
-    if soundbeam_trainable is not None:
-        config_dict['lightning_module']['args']['soundbeam']['trainable'] = soundbeam_trainable
+    if embedding_injection_apply is not None:
+        config_dict['lightning_module']['args']['embedding_injection']['apply'] = embedding_injection_apply
+    if embedding_injection_trainable is not None:
+        config_dict['lightning_module']['args']['embedding_injection']['trainable'] = embedding_injection_trainable
     if train_batch_size is not None:
         config_dict['datamodule']['args']['train_dataloader']['batch_size'] = train_batch_size
     if val_batch_size is not None:
@@ -147,6 +161,9 @@ def main(config_file, resume_ckpt_path=None, wandb_project="DCASE25_Task4", wand
     # Initialize lightning module
     print('Initialize lightning module')
     pl_model = initialize_config(configs['lightning_module'])
+
+    if embedding_injection_checkpoint_path is not None:
+        load_ckpt(embedding_injection_checkpoint_path, pl_model.embedding_model)
     
     # Initialize callbacks
     print('Initialize callbacks')
@@ -222,10 +239,12 @@ if __name__ == "__main__":
     parser.add_argument("--no_time_film", action="store_true", help="Disable TimeFiLM")
     parser.add_argument("--use_dprnn", action="store_true", default=None, help="Enable DPRNN")
     parser.add_argument("--no_dprnn", action="store_true", help="Disable DPRNN")
-    parser.add_argument("--soundbeam_apply", action="store_true", default=None, help="Enable Soundbeam")
-    parser.add_argument("--no_soundbeam", action="store_true", help="Disable Soundbeam")
-    parser.add_argument("--soundbeam_trainable", action="store_true", default=None, help="Make Soundbeam trainable")
-    parser.add_argument("--soundbeam_frozen", action="store_true", help="Freeze Soundbeam")
+    parser.add_argument("--embedding_injection_apply", action="store_true", default=None, help="Enable Embedding Injection")
+    parser.add_argument("--embedding_injection_wandb_id", default=None, type=str, help="Wandb ID of model used for Embedding Injection")
+    parser.add_argument("--embedding_injection_checkpoint_path", default=None, type=str, help="Path to checkpoint of model used for Embedding Injection")
+    parser.add_argument("--no_embedding_injection", action="store_true", help="Disable Embedding Injection")
+    parser.add_argument("--embedding_injection_trainable", action="store_true", default=None, help="Make Embedding Injection trainable")
+    parser.add_argument("--embedding_injection_frozen", action="store_true", help="Freeze Embedding Injection")
     parser.add_argument("--lr_dprnn", type=float, default=None, help="Learning rate for DPRNN")
     
     # Training configuration overrides
@@ -240,10 +259,10 @@ if __name__ == "__main__":
         args.use_time_film = False
     if args.no_dprnn:
         args.use_dprnn = False
-    if args.no_soundbeam:
-        args.soundbeam_apply = False
-    if args.soundbeam_frozen:
-        args.soundbeam_trainable = False
+    if args.no_embedding_injection:
+        args.embedding_injection_apply = False
+    if args.embedding_injection_frozen:
+        args.embedding_injection_trainable = False
     
     main(
         config_file=args.config,
@@ -254,8 +273,10 @@ if __name__ == "__main__":
         max_iterations=args.max_iterations,
         use_time_film=args.use_time_film,
         use_dprnn=args.use_dprnn,
-        soundbeam_apply=args.soundbeam_apply,
-        soundbeam_trainable=args.soundbeam_trainable,
+        embedding_injection_apply=args.embedding_injection_apply,
+        embedding_injection_wandb_id=args.embedding_injection_wandb_id,
+        embedding_injection_checkpoint_path=args.embedding_injection_checkpoint_path,
+        embedding_injection_trainable=args.embedding_injection_trainable,
         lr_dprnn=args.lr_dprnn,
         train_batch_size=args.train_batch_size,
         val_batch_size=args.val_batch_size,

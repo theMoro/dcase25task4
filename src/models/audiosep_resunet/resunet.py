@@ -14,6 +14,28 @@ AUDIOSEP_URL = "https://huggingface.co/spaces/Audio-AGI/AudioSep/resolve/main/ch
 CKPT_NAME = "audiosep_base_4M_steps.ckpt"
 
 
+def _map_soundbeam_to_embedding_injection(state_dict):
+    """
+    Map old 'soundbeam' parameter names to new 'embedding_injection' names for backward compatibility.
+    
+    Args:
+        state_dict: Dictionary of parameter names to tensors
+        
+    Returns:
+        Dictionary with updated parameter names
+    """
+    mapped_dict = {}
+    for key, value in state_dict.items():
+        # Replace 'soundbeam' with 'embedding_injection' in parameter names
+        new_key = key.replace('soundbeam_weights', 'embedding_injection_weights')
+        new_key = new_key.replace('weight_soundbeam_features', 'weight_embedding_injection_features')
+        new_key = new_key.replace('soundbeam_merge_method', 'embedding_injection_merge_method')
+        # General replacement for any remaining 'soundbeam' references
+        new_key = new_key.replace('soundbeam', 'embedding_injection')
+        mapped_dict[new_key] = value
+    return mapped_dict
+
+
 class FiLM(nn.Module):
     def __init__(self, film_meta, condition_size):
         super(FiLM, self).__init__()
@@ -344,7 +366,7 @@ class DecoderBlockRes1B(nn.Module):
 
 
 class ResUNet30_Base(nn.Module, Base):
-    def __init__(self, input_channels, output_channels, target_sources_num, soundbeam=None,
+    def __init__(self, input_channels, output_channels, target_sources_num, embedding_injection=None,
                  channels_last=False, hop_size: int = 320, window_size: int = 2048,
                  time_film_mode: str = "additive"):
         super(ResUNet30_Base, self).__init__()
@@ -531,21 +553,21 @@ class ResUNet30_Base(nn.Module, Base):
             bias=True,
         )
 
-        if soundbeam is None:
-            soundbeam = {'apply': False}
+        if embedding_injection is None:
+            embedding_injection = {'apply': False}
 
-        self.soundbeam = soundbeam
+        self.embedding_injection = embedding_injection
 
-        if self.soundbeam['apply']:
-            self.soundbeam_merge_method = self.soundbeam['merge_method']
+        if self.embedding_injection['apply']:
+            self.embedding_injection_merge_method = self.embedding_injection['merge_method']
 
-            print(f"merge_method: {self.soundbeam_merge_method}")
+            print(f"merge_method: {self.embedding_injection_merge_method}")
 
-            if self.soundbeam_merge_method == 'add':
+            if self.embedding_injection_merge_method == 'add':
                 # Learnable weights for additive merging
                 self.weight_x_center = nn.Parameter(torch.tensor(1.0))
-                self.weight_soundbeam_features = nn.Parameter(torch.tensor(1.0))
-            elif self.soundbeam_merge_method == 'concat':
+                self.weight_embedding_injection_features = nn.Parameter(torch.tensor(1.0))
+            elif self.embedding_injection_merge_method == 'concat':
                 # Convolutional layer to reduce channels after concatenation
                 self.merge_conv = nn.Conv2d(768, 384, kernel_size=1)
                 self.merge_bn = nn.BatchNorm2d(768, momentum=momentum)
@@ -556,10 +578,10 @@ class ResUNet30_Base(nn.Module, Base):
             else:
                 raise ValueError("merge_method must be 'add' or 'concat'")
 
-            if self.soundbeam['tagger_model']['args']['model_name'] == 'm2d':
+            if self.embedding_injection['tagger_model']['args']['model_name'] == 'm2d':
                 self.downsample_conv = nn.Conv2d(in_channels=768, out_channels=384, kernel_size=1)
                 self.downsample_bn = nn.BatchNorm2d(768, momentum=momentum)
-            elif self.soundbeam['tagger_model']['args']['model_name'] == 'beats':
+            elif self.embedding_injection['tagger_model']['args']['model_name'] == 'beats':
                 self.downsample_conv = nn.Conv2d(in_channels=768, out_channels=384, kernel_size=1)
                 self.downsample_bn = nn.BatchNorm2d(768, momentum=momentum)
             else:
@@ -723,8 +745,8 @@ class ResUNet30_Base(nn.Module, Base):
         # --> bs=5, 384 out-channels, 63 time-steps, 8 freq-bins
 
         merged, features = None, None
-        if self.soundbeam['apply']:
-            if self.soundbeam['tagger_model']['args']['model_name'] == 'm2d':
+        if self.embedding_injection['apply']:
+            if self.embedding_injection['tagger_model']['args']['model_name'] == 'm2d':
                 # weighted_avg: (bs, 310, 768)
                 weighted_avg = weighted_avg.permute(0, 2, 1)  # (bs, 768, 310)
                 weighted_avg = weighted_avg.unflatten(dim=2, sizes=(5, 62))  # (bs, 768, 5, 62)
@@ -737,7 +759,7 @@ class ResUNet30_Base(nn.Module, Base):
                                          align_corners=False)  # (bs, 768, 63, 8)
 
                 features = self.downsample_conv(features)
-            elif self.soundbeam['tagger_model']['args']['model_name'] == 'beats':
+            elif self.embedding_injection['tagger_model']['args']['model_name'] == 'beats':
                 # weighted_avg: (bs, 496, 768)
                 weighted_avg = weighted_avg.permute(0, 2, 1).contiguous()  # (bs, 768, 496)
                 weighted_avg = weighted_avg.unflatten(dim=2, sizes=(62, 8))  # (bs, 768, 62, 8)
@@ -756,7 +778,7 @@ class ResUNet30_Base(nn.Module, Base):
             else:
                 raise ValueError("Unknown tagger model name")
 
-            if self.soundbeam_merge_method == 'add':
+            if self.embedding_injection_merge_method == 'add':
                 # Normalize both tensors
                 x_center_mean = x_center.mean(dim=[2, 3], keepdim=True)
                 x_center_std = x_center.std(dim=[2, 3], keepdim=True) + 1e-6
@@ -767,8 +789,8 @@ class ResUNet30_Base(nn.Module, Base):
                 m2d_norm = (features - m2d_mean) / m2d_std
 
                 # Weighted addition
-                merged = self.weight_x_center * x_center_norm + self.weight_soundbeam_features * m2d_norm
-            elif self.soundbeam_merge_method == 'concat':
+                merged = self.weight_x_center * x_center_norm + self.weight_embedding_injection_features * m2d_norm
+            elif self.embedding_injection_merge_method == 'concat':
                 # Concatenate along channel dimension
                 concatenated = torch.cat([x_center, features], dim=1)  # (bs, 768, 63, 8)
                 merged = self.merge_conv(
@@ -844,7 +866,7 @@ def get_film_meta(module):
 
 class ResUNet30(nn.Module):
     def __init__(self, input_channels, output_channels, condition_size, target_sources_num,
-                 label_len, soundbeam=None, use_time_film=False, time_film_mode: str = "additive",
+                 label_len, embedding_injection=None, use_time_film=False, time_film_mode: str = "additive",
                  binarize_sed_preds: bool = False, channels_last=False, load_pretrained=True,
                  hop_size: int = 320, window_size: int = 2048, **kwargs):
         super(ResUNet30, self).__init__()
@@ -861,7 +883,7 @@ class ResUNet30(nn.Module):
             input_channels=input_channels,
             output_channels=output_channels,
             target_sources_num=target_sources_num,
-            soundbeam=soundbeam,
+            embedding_injection=embedding_injection,
             channels_last=channels_last,
             hop_size=hop_size,
             window_size=window_size,
@@ -926,6 +948,9 @@ class ResUNet30(nn.Module):
                     state_dict[after_conv_bias_key] = (
                         state_dict[after_conv_bias_key].repeat(self.target_sources_num * input_channels))
 
+            # Map old 'soundbeam' parameter names to 'embedding_injection' for backward compatibility
+            state_dict = _map_soundbeam_to_embedding_injection(state_dict)
+            
             missing, unexpected = self.load_state_dict(state_dict, strict=False)
             assert all([k.startswith("base.out_conv.") or k.startswith("label_embedding.")
                         or k.startswith("base.downsample_") or k.startswith("base.weight_") for k in missing])
@@ -948,16 +973,16 @@ class ResUNet30(nn.Module):
 
         self.binarize_sed_preds = binarize_sed_preds
 
-        if soundbeam is None:
-            soundbeam = {'apply': False}
+        if embedding_injection is None:
+            embedding_injection = {'apply': False}
 
-        self.soundbeam = soundbeam
+        self.embedding_injection = embedding_injection
 
-        if self.soundbeam['apply']:
-            if self.soundbeam['tagger_model']['args']['model_name'] == 'm2d':
-                self.soundbeam_weights = nn.Parameter(torch.ones(13) / 13)  # learnable weights
-            elif self.soundbeam['tagger_model']['args']['model_name'] == 'beats':
-                self.soundbeam_weights = nn.Parameter(torch.ones(12) / 12)  # learnable weights
+        if self.embedding_injection['apply']:
+            if self.embedding_injection['tagger_model']['args']['model_name'] == 'm2d':
+                self.embedding_injection_weights = nn.Parameter(torch.ones(13) / 13)  # learnable weights
+            elif self.embedding_injection['tagger_model']['args']['model_name'] == 'beats':
+                self.embedding_injection_weights = nn.Parameter(torch.ones(12) / 12)  # learnable weights
             else:
                 raise ValueError("Unknown tagger model name")
 
@@ -1012,8 +1037,8 @@ class ResUNet30(nn.Module):
 
         # Compute weighted average of M2D embeddings if provided
         weighted_avg = None
-        if self.soundbeam['apply']:
-            weights = F.softmax(self.soundbeam_weights, dim=0)
+        if self.embedding_injection['apply']:
+            weights = F.softmax(self.embedding_injection_weights, dim=0)
             stacked_embeddings = torch.stack(embeddings, dim=1)  # (bs, n_blocks, 310, 768)
             weighted_avg = torch.sum(stacked_embeddings * weights[None, :, None, None], dim=1)  # (bs, 310, 768)
 
@@ -1085,8 +1110,8 @@ class ResUNet30(nn.Module):
             )
 
             weighted_avg = None
-            if self.soundbeam['apply']:
-                weights = F.softmax(self.soundbeam_weights, dim=0)
+            if self.embedding_injection['apply']:
+                weights = F.softmax(self.embedding_injection_weights, dim=0)
                 stacked_embeddings = torch.stack(embeddings, dim=1)
                 weighted_avg = torch.sum(stacked_embeddings * weights[None, :, None, None], dim=1)
 
@@ -1197,7 +1222,7 @@ class ResUNet30(nn.Module):
                 name.startswith("base.downsample_"),
                 name.startswith("base.after_conv"),
                 name.startswith("base.pre_conv"),
-                name.startswith("soundbeam_weights"),
+                name.startswith("embedding_injection_weights"),
             ]):
                 new.append((name, param))
                 covered.add(name)

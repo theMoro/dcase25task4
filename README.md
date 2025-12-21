@@ -1,35 +1,28 @@
-# Audio Source Separation with Sound Event Detection for DCASE 2025 Task 4
+# Audio Source Separation using Sound Event Detection Models for DCASE 2025 Task 4
 
-This repository contains the implementation for our paper submitted to the [DCASE 2025 Workshop](https://dcase.community/documents/workshop2025/proceedings/DCASE2025Workshop_Morocutti_76.pdf). 
+This repository contains the implementation for our paper accepted at the [DCASE 2025 Workshop](https://dcase.community/documents/workshop2025/proceedings/DCASE2025Workshop_Morocutti_76.pdf). 
 
-We participated in **Task 4: Sound Event Detection and Separation** of the DCASE 2025 challenge and achieved **2nd place** in the competition.
+We participated in **Task 4: Spatial Semantic Segmentation of Sound Scenes** of the DCASE 2025 challenge and achieved **2nd place** in the competition.
 
-This code builds on the baseline implementation for DCASE 2025 Task 4: https://github.com/nttcslab/dcase2025_task4_baseline
+This code builds on the baseline codebase of DCASE 2025 Task 4: https://github.com/nttcslab/dcase2025_task4_baseline
 
 ## Overview
 
-Our system consists of two components:
-1. **Sound Event Detection (SED) Model**: M2D-based tagger for detecting sound events in mixtures
-2. **Source Separation Model**: ResUNet-based separator with Soundbeam conditioning and optional iterative refinement
+Our system consists of two stages:
+1. **Sound Event Detection (SED)**: M2D-based tagger for detecting sound events with their onsets and offsets in mixtures
+2. **Source Separation**: ResUNet-based separation model leveraging a SED model
 
-The system uses a novel conditioning mechanism that enables the separator to leverage embeddings from a pre-trained sound event detection model to guide source separation.
-
-
-## Current State of Repository
-
-- The training code is fully functional and should allow reproduction of all results in the paper.
-- The evaluation / test code is not functional yet, will be fixed soon. 
-- The pre-trained checkpoints will be made available soon. 
+The system uses novel mechanisms (Embedding Injection, temporal and class-wise conditioning) which enable the separator to leverage embeddings and predictions from a pre-trained sound event detection model to guide source separation.
 
 ## Method
 
 ![Architecture](imgs/figure1.png)
-*Figure 1: Overall architecture of our system*
+*Figure 1: Overall architecture of our system.*
 
 ## Results
 
 ![Results Table](imgs/table1.png)
-*Table 1: Quantitative results on DCASE 2025 Task 4 test set*
+*Table 1: Quantitative results on DCASE 2025 Task 4 test set.*
 
 ![Iterative Refinement Mechanism](imgs/figure2.png)
 *Figure 2: Performance of models using the iterative refinement mechanism with different values for the maximal number of iterations used during training.*
@@ -99,62 +92,68 @@ To fine-tune the M2D model on the DCASE 2025 Task 4 training set, run:
 python -m src.train --config config/sound_event_detection_models/m2d.yaml --wandb_name m2d
 ```
 
-This model will be used as Stage 1 SED model and also as Stage 2 SED model for temporal guidance in the separation models.
+This model can be used as Stage 1 SED model and also as Stage 2 SED model for temporal guidance (TimeFiLM) and embedding injection in the separation models.
 
 #### Source Separation Models
 
-We now use only **2 base configurations** with command-line arguments to create all model variants:
+We differentiate between **two base configurations** for the AudioSep-SED source separation model:
 
-**Base Configurations:**
-
-1. **Non-Iterative Models** (`separator_non_iterative.yaml`):
-   - Baseline model (Soundbeam + TimeFiLM, trainable Soundbeam)
-   - Ablation studies (without Soundbeam, without TimeFiLM, frozen Soundbeam)
+1. **Non-Iterative Models** (`separator.yaml`):
+   - Baseline model (Embedding Injection + TimeFiLM, trainable Stage 2 SED model)
+   - Ablation studies (without Embedding Injection, without TimeFiLM, frozen Stage 2 SED model)
    - DPRNN variant
 
 2. **Iterative Models** (`separator_iterative.yaml`):
-   - All iterative refinement variants (2, 3, 4 iterations)
+   - Iterative refinement variants (maximum of 2, 3 or 4 iterations)
 
 **Training Commands:**
 
-**1. Baseline Model** (Soundbeam + TimeFiLM, trainable Stage 2 SED model):
+**Important:** Determine the checkpoint used for the embedding injection model by using either ```embedding_injection_wandb_id``` or ```embedding_injection_checkpoint_path```. 
+
+**1. Baseline Model** (Embedding Injection + TimeFiLM, trainable Stage 2 SED model):
 ```bash
-python -m src.train --config config/separation_models/separator_non_iterative.yaml --wandb_name separator_baseline
+python -m src.train --config config/separation_models/separator.yaml --embedding_injection_wandb_id <wandb-id-of-your-tagger-model> --wandb_name separator_baseline
 ```
 
-**2. Without TimeFiLM** (Soundbeam only, trainable Stage 2 SED model):
+or 
+
 ```bash
-python -m src.train --config config/separation_models/separator_non_iterative.yaml --no_time_film --wandb_name separator_no_timefilm
+python -m src.train --config config/separation_models/separator.yaml --embedding_injection_checkpoint_path /path/to/your_tagger_model.ckpt --wandb_name separator_baseline
 ```
 
-**3. Without Soundbeam** (TimeFiLM only, trainable Stage 2 SED model):
+**2. Without TimeFiLM** (Embedding Injection only, trainable Stage 2 SED model):
 ```bash
-python -m src.train --config config/separation_models/separator_non_iterative.yaml --no_soundbeam --wandb_name separator_no_soundbeam
+python -m src.train --config config/separation_models/separator.yaml --embedding_injection_wandb_id <wandb-id-of-your-tagger-model> --no_time_film --wandb_name separator_no_timefilm
 ```
 
-**4. With Frozen Soundbeam** (Soundbeam + TimeFiLM, frozen Stage 2 SED model):
+**3. Without Embedding Injection** (TimeFiLM only, trainable Stage 2 SED model):
 ```bash
-python -m src.train --config config/separation_models/separator_non_iterative.yaml --soundbeam_frozen --wandb_name separator_soundbeam_frozen
+python -m src.train --config config/separation_models/separator.yaml --embedding_injection_wandb_id <wandb-id-of-your-tagger-model> --no_embedding_injection --wandb_name separator_no_embedding_injection
+```
+
+**4. With Frozen Stage 2 SED model** (Embedding Injection + TimeFiLM, frozen Stage 2 SED model):
+```bash
+python -m src.train --config config/separation_models/separator.yaml --embedding_injection_wandb_id <wandb-id-of-your-tagger-model> --embedding_injection_frozen --wandb_name separator_embedding_injection_frozen
 ```
 
 **5. With DPRNN** (Baseline + DPRNN):
 ```bash
-python -m src.train --config config/separation_models/separator_non_iterative.yaml --use_dprnn --lr_dprnn 0.0005 --val_batch_size 1 --wandb_name separator_dprnn
+python -m src.train --config config/separation_models/separator.yaml --embedding_injection_wandb_id <wandb-id-of-your-tagger-model> --use_dprnn --lr_dprnn 0.0005 --val_batch_size 1 --wandb_name separator_dprnn
 ```
 
 **6. Iterative Refinement (2 iterations)**:
 ```bash
-python -m src.train --config config/separation_models/separator_iterative.yaml --max_iterations 2 --wandb_name separator_iter_2
+python -m src.train --config config/separation_models/separator_iterative.yaml --embedding_injection_wandb_id <wandb-id-of-your-tagger-model> --max_iterations 2 --wandb_name separator_iter_2
 ```
 
 **7. Iterative Refinement (3 iterations)**:
 ```bash
-python -m src.train --config config/separation_models/separator_iterative.yaml --max_iterations 3 --train_batch_size 1 --wandb_name separator_iter_3
+python -m src.train --config config/separation_models/separator_iterative.yaml --embedding_injection_wandb_id <wandb-id-of-your-tagger-model> --max_iterations 3 --train_batch_size 1 --wandb_name separator_iter_3
 ```
 
 **8. Iterative Refinement (4 iterations)**:
 ```bash
-python -m src.train --config config/separation_models/separator_iterative.yaml --max_iterations 4 --train_batch_size 1 --wandb_name separator_iter_4
+python -m src.train --config config/separation_models/separator_iterative.yaml --embedding_injection_wandb_id <wandb-id-of-your-tagger-model> --max_iterations 4 --train_batch_size 1 --wandb_name separator_iter_4
 ```
 
 **Available Command-Line Arguments:**
@@ -162,8 +161,8 @@ python -m src.train --config config/separation_models/separator_iterative.yaml -
 - `--max_iterations N`: Set maximum iterations for iterative models
 - `--use_time_film` / `--no_time_film`: Enable/disable TimeFiLM
 - `--use_dprnn` / `--no_dprnn`: Enable/disable DPRNN
-- `--soundbeam_apply` / `--no_soundbeam`: Enable/disable Soundbeam
-- `--soundbeam_trainable` / `--soundbeam_frozen`: Make Soundbeam trainable/frozen
+- `--embedding_injection_apply` / `--no_embedding_injection`: Enable/disable Embedding Injection
+- `--embedding_injection_trainable` / `--embedding_injection_frozen`: Make Embedding Injection trainable/frozen
 - `--lr_dprnn FLOAT`: Set DPRNN learning rate
 - `--train_batch_size N`: Override training batch size
 - `--val_batch_size N`: Override validation batch size
@@ -173,7 +172,7 @@ python -m src.train --config config/separation_models/separator_iterative.yaml -
 
 To resume training from a checkpoint (of a non-iterative model, adjust path accordingly for iterative models), use:
 ```bash
-python -m src.train --config config/separation_models/separator_non_iterative.yaml --resume outputs/checkpoints/separator_non_iterative/<wandb_id>/last.ckpt --resume_wandb_id <wandb_id>
+python -m src.train --config config/separation_models/separator.yaml --embedding_injection_wandb_id <wandb-id-of-your-tagger-model> --resume outputs/checkpoints/separator_non_iterative/<wandb_id>/last.ckpt --resume_wandb_id <wandb_id>
 ```
 
 ## Checkpoints
@@ -181,70 +180,74 @@ python -m src.train --config config/separation_models/separator_non_iterative.ya
 We provide pre-trained checkpoints for each training configuration. Each checkpoint corresponds to one of the training configurations described above.
 
 Available checkpoints:
-- `m2d_tagging.ckpt` - Sound event detection model
-- `separator_baseline.ckpt` - Baseline separator model
-- `separator_no_timefilm.ckpt` - Separator without TimeFiLM
-- `separator_no_soundbeam.ckpt` - Separator without Soundbeam
-- `separator_soundbeam_frozen.ckpt` - Separator with frozen Soundbeam
-- `separator_dprnn.ckpt` - Separator with DPRNN
-- `separator_iter_2.ckpt` - Separator with 2-iteration refinement
-- `separator_iter_3.ckpt` - Separator with 3-iteration refinement
-- `separator_iter_4.ckpt` - Separator with 4-iteration refinement
+- `m2d_sed.ckpt` - Sound event detection model
+- `audiosep_sed.ckpt` - AudioSep-SED model using TimeFiLM and Embedding Injection
+- `audiosep_sed_no-timefilm.ckpt` - AudioSep-SED model using only Embedding Injection, no TimeFiLM
+- `audiosep_sed_no-embedding-injection.ckpt` - AudioSep-SED model using only TimeFiLM, no Embedding Injection
+- `audiosep_sed_s2sed-not-trainable.ckpt` - AudioSep-SED model using TimeFiLM and Embedding Injection, but Stage 2 SED model is frozen
+- `audiosep_sed_dprnn.ckpt` - AudioSep-SED model using TimeFiLM, Embedding Injection and DPRNN
+- `audiosep_sed_iter2.ckpt` - AudioSep-SED model using TimeFiLM, Embedding Injection, DPRNN and iterative refinement with a maximum of 2 iterations during training
+- `audiosep_sed_iter3.ckpt` - AudioSep-SED model using TimeFiLM, Embedding Injection, DPRNN and iterative refinement with a maximum of 3 iterations during training
+- `audiosep_sed_iter4.ckpt` - AudioSep-SED model using TimeFiLM, Embedding Injection, DPRNN and iterative refinement with a maximum of 4 iterations during training
 
 
 ## Evaluation
 
-### Evaluation Logic and SED Model Stages
+### SED Model Stages
 
 Our system uses **two different SED models** with distinct roles:
 
-#### **Stage 1 SED Model (Label Prediction for Evaluation):**
-- **Purpose**: Predicts sound event labels for separator evaluation
-- **Configuration**: `evaluation_tagger_model` in YAML files
-- **During Training Validation**: Uses baseline M2D (`checkpoint/m2dat.ckpt`) for consistent evaluation
-- **During Testing**: Uses the trained tagger model loaded from checkpoint
-- **Output**: Provides label predictions for CA-SDR calculation
-- **Files**: `test_baseline_tagger_predictions.json` and `val_baseline_tagger_predictions.json`
+#### **Stage 1 SED Model (Label Prediction):**
+- **Purpose**: Predicts sound event labels
+- **Configuration**: `evaluation_tagger_model` in YAML files of the separator
+- **During training of separation model**: Set to the baseline M2D (`checkpoint/m2dat.ckpt`) for consistent evaluation on the validation set
+- **During testing of separation model**: Can be set to any trained tagger model using `tagger_wandb_id` or `tagger_checkpoint_path` for evaluation of the final system on the test set
 
-#### **Stage 2 SED Model (Embedding Injection for Separation):**
-- **Purpose**: Provides embeddings for Soundbeam and TimeFiLM conditioning
-- **Configuration**: `soundbeam.tagger_model` in YAML files
+#### **Stage 2 SED Model (used for embedding injection and temporal and class-wise conditioning for separation):**
+- **Purpose**: Integrated in Stage 2 of the system; provides embeddings and predictions for Embedding Injection and TimeFiLM / FiLM conditioning
+- **Configuration**: `embedding_injection.tagger_model` in YAML files
 - **Training**: Fine-tuned together with the separator (if `trainable: true`)
-- **Features**: Provides `embeddings` and `logits_strong` for the separator
 - **Integration**: Injected into separator architecture for enhanced performance
 
-#### **Evaluation Approach:**
-
-**During Training Validation:**
-- **Stage 1**: Uses pre-computed predictions from baseline M2D model
-- **Stage 2**: Uses the trained embedding model (if Soundbeam/TimeFiLM enabled)
-- **Purpose**: Consistent evaluation baseline across all separator experiments
-
-**During Testing (`trainer.test()`):**
-- **Stage 1**: Uses the trained tagger model from checkpoint (any model can be loaded)
-- **Stage 2**: Uses the trained embedding model from checkpoint
-- **Purpose**: End-to-end evaluation with the actual trained models
-- **Note**: The `test.py` script preserves the `evaluation_tagger_model` configuration for Stage 1 evaluation
-
-#### **Why This Two-Stage Approach:**
-- **Consistent Evaluation**: Stage 1 ensures fair comparison between separator architectures
-- **Enhanced Separation**: Stage 2 provides rich embeddings for better separation quality
-- **Flexible Testing**: Any trained tagger model can be used for Stage 1 during testing
-- **Focused Assessment**: Separates evaluation consistency from separation enhancement
 
 ### Evaluate Models
 
 #### **Testing Tagger Models:**
 ```bash
-python -m src.test --config config/test_tagger.yaml --checkpoint path/to/tagger_checkpoint.ckpt
+python -m src.test --config config/test_tagger.yaml --tagger_wandb_id <wandb-id-of-your-tagger-model>
+```
+
+or 
+
+```bash
+python -m src.test --config config/test_tagger.yaml --tagger_checkpoint_path /path/to/checkpoint_of_tagger_model.ckpt
 ```
 
 #### **Testing Separator Models:**
+
+For testing the separation model with the **baseline M2D tagger**:  
+
 ```bash
-python -m src.test --config config/test_separator.yaml --checkpoint path/to/separator_checkpoint.ckpt
+python -m src.test --config config/test_separator_with_baseline_tagger.yaml --separator_checkpoint_path path/to/separator_checkpoint.ckpt
 ```
 
-**Note**: The separator test config includes the `evaluation_tagger_model` configuration needed for separator evaluation.
+For testing the separation model with a **fine-tuned version of our pretrained M2D SED model**: 
+
+```bash
+python -m src.test --config config/test_separator_with_tagger.yaml --tagger_wandb_id <wandb-id-of-your-tagger-model> --separator_checkpoint_path path/to/separator_checkpoint.ckpt
+```
+
+or 
+
+```bash
+python -m src.test --config config/test_separator_with_tagger.yaml --tagger_checkpoint_path /path/to/checkpoint_of_tagger_model.ckpt --separator_checkpoint_path path/to/separator_checkpoint.ckpt
+```
+
+For testing an iterative version of the separation model with a **fine-tuned version of our pretrained M2D SED model**: 
+
+```bash
+python -m src.test --config config/test_separator_with_tagger.yaml --tagger_checkpoint_path /path/to/checkpoint_of_tagger_model.ckpt --separator_checkpoint_path path/to/separator_checkpoint.ckpt --sep_multiple_iter --max_iterations 3
+```
 
 ## Citation
 
